@@ -877,13 +877,19 @@ export default function RegistrationForm() {
         </Card>
 
         {/* Botões */}
-        <div className="flex gap-4 justify-end">
-          <Button type="button" variant="outline" onClick={() => window.history.back()}>
-            Voltar
-          </Button>
-          <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
-            {loading ? "Processando..." : "Salvar"}
-          </Button>
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex gap-4 justify-end w-full">
+            <Button type="button" variant="outline" onClick={() => window.history.back()}>
+              Voltar
+            </Button>
+            <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+              {loading ? "Processando..." : "Salvar"}
+            </Button>
+          </div>
+
+          <p className="text-sm text-gray-600 text-center max-w-2xl">
+            Ao clicar em salvar, você será redirecionado para realizar o pagamento da sua taxa associativa, sendo ela o valor proporcional ao plano que você escolheu.
+          </p>
         </div>
       </form>
 
