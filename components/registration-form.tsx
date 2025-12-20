@@ -169,9 +169,18 @@ export default function RegistrationForm() {
 
     try {
       const response = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`)
+
+      if (!response.ok) {
+        console.error("Erro na resposta da API ViaCEP:", response.status)
+        setCepValid(false)
+        return
+      }
+
       const data = await response.json()
 
-      if (!data.erro) {
+      if (data.erro === true) {
+        setCepValid(false)
+      } else if (data.cep) {
         setCepValid(true)
         setFormData((prev) => ({
           ...prev,
@@ -185,7 +194,7 @@ export default function RegistrationForm() {
       }
     } catch (error) {
       console.error("Erro ao buscar CEP:", error)
-      setCepValid(false)
+      setCepValid(null)
     }
   }
 
