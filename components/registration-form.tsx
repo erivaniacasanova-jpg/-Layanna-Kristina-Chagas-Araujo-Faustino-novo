@@ -486,56 +486,10 @@ export default function RegistrationForm() {
   if (showSuccessModal) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white rounded-lg p-6 mx-auto max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 text-center">
-            Parabéns! Seu cadastro foi realizado com sucesso. 🎉
-          </h1>
-
-          <div className="space-y-3 text-gray-700 text-sm md:text-base leading-relaxed">
-            <p>
-              Para darmos continuidade com à ativação do seu plano, é necessário realizar o pagamento da sua taxa associativa, no valor proporcional ao plano escolhido por você.
-            </p>
-
-            <p>
-              Essa taxa é solicitada antes da ativação, pois ela confirma oficialmente a sua entrada na Federal Associados.
-            </p>
-
-            <p className="font-semibold">
-              O valor é usado para cobrir os custos administrativos e operacionais, como:
-            </p>
-
-            <ul className="list-disc list-inside space-y-1 ml-4 text-sm">
-              <li>Geração do número.</li>
-              <li>Configuração da linha.</li>
-              <li>Liberação do seu escritório virtual.</li>
-              <li>E acesso a todos os benefícios exclusivos da empresa, como o Clube de Descontos, Cinema Grátis, Programa PBI, entre outros.</li>
-            </ul>
-
-            <p>
-              O pagamento da taxa é o primeiro passo para liberar o seu benefício de internet móvel e garantir sua ativação com total segurança.
-            </p>
-
-            <p>
-              Logo após efetuar o pagamento, você receberá um e-mail para fazer a biometria digital.
-            </p>
-
-            <p className="font-semibold">
-              Após isso já partimos para ativação do seu plano.
-            </p>
-
-            <p className="text-center font-bold text-base md:text-lg mt-4">
-              Clique no botão abaixo para continuar:
-            </p>
-          </div>
-
-          <div className="flex justify-center mt-6">
-            <Button
-              onClick={() => window.location.href = "https://federalassociados.com.br/boletos"}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-base md:text-lg font-semibold rounded-lg shadow-lg transition-colors"
-            >
-              Realizar Adesão
-            </Button>
-          </div>
+        <div className="bg-white rounded-lg p-8 mx-auto max-w-md w-full shadow-2xl">
+          <p className="text-lg md:text-xl text-gray-900 text-center leading-relaxed">
+            Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.
+          </p>
         </div>
       </div>
     )
