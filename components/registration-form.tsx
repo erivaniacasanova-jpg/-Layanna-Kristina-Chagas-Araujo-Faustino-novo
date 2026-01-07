@@ -164,26 +164,47 @@ export default function RegistrationForm() {
     setWhatsappValidating(true)
     const cleanNumber = `55${numbers}`
 
-    setTimeout(() => {
-      const img = new Image()
-      img.onload = () => {
+    try {
+      const response = await fetch('https://webhook.fiqon.app/webhook/019b97c2-6aed-7162-8a3a-1fd63694ecd6/5fb591d0-1499-4928-9b9f-198abec46afe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat: {
+            phone: cleanNumber
+          }
+        })
+      })
+
+      const data = await response.json()
+
+      if (data.existe === true) {
         setWhatsappValid(true)
         setWhatsappValidating(false)
         toast({
           title: "WhatsApp válido",
           description: "Número confirmado no WhatsApp.",
         })
-      }
-      img.onerror = () => {
-        setWhatsappValid(true)
+      } else {
+        setWhatsappValid(false)
         setWhatsappValidating(false)
         toast({
-          title: "WhatsApp válido",
-          description: "Número confirmado no WhatsApp.",
+          title: "Número inválido",
+          description: "O número informado não possui WhatsApp. Por favor, verifique.",
+          variant: "destructive",
         })
       }
-      img.src = `https://wa.me/${cleanNumber}`
-    }, 1000)
+    } catch (error) {
+      console.error('Erro ao validar WhatsApp:', error)
+      setWhatsappValid(false)
+      setWhatsappValidating(false)
+      toast({
+        title: "Erro na validação",
+        description: "Não foi possível validar o número. Tente novamente.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleInputChange = (field: string, value: string) => {
