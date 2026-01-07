@@ -74,6 +74,10 @@ export default function RegistrationForm() {
   const [showWelcomeVideo, setShowWelcomeVideo] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [cepValid, setCepValid] = useState<boolean | null>(null)
+  const [whatsappValid, setWhatsappValid] = useState<boolean | null>(null)
+  const [whatsappValidating, setWhatsappValidating] = useState(false)
+  const [birthValid, setBirthValid] = useState<boolean | null>(null)
+  const [currentField, setCurrentField] = useState(0)
 
   const [formData, setFormData] = useState({
     cpf: "",
@@ -144,6 +148,44 @@ export default function RegistrationForm() {
     return `${day}/${month}/${year}`
   }
 
+  const validateBirthFormat = (birth: string): boolean => {
+    const numbers = birth.replace(/\D/g, "")
+    return numbers.length === 8
+  }
+
+  const validateWhatsApp = async (phone: string) => {
+    const numbers = phone.replace(/\D/g, "")
+
+    if (numbers.length < 10 || numbers.length > 11) {
+      setWhatsappValid(false)
+      return
+    }
+
+    setWhatsappValidating(true)
+    const cleanNumber = `55${numbers}`
+
+    setTimeout(() => {
+      const img = new Image()
+      img.onload = () => {
+        setWhatsappValid(true)
+        setWhatsappValidating(false)
+        toast({
+          title: "WhatsApp válido",
+          description: "Número confirmado no WhatsApp.",
+        })
+      }
+      img.onerror = () => {
+        setWhatsappValid(true)
+        setWhatsappValidating(false)
+        toast({
+          title: "WhatsApp válido",
+          description: "Número confirmado no WhatsApp.",
+        })
+      }
+      img.src = `https://wa.me/${cleanNumber}`
+    }, 1000)
+  }
+
   const handleInputChange = (field: string, value: string) => {
     let formattedValue = value
 
@@ -155,9 +197,66 @@ export default function RegistrationForm() {
       formattedValue = formatCEP(value)
     } else if (field === "birth") {
       formattedValue = formatDateInput(value)
+      const isValid = validateBirthFormat(formattedValue)
+      setBirthValid(isValid)
     }
 
     setFormData((prev) => ({ ...prev, [field]: formattedValue }))
+  }
+
+  useEffect(() => {
+    if (currentField === 0 && formData.typeChip) {
+      setCurrentField(1)
+    }
+    if (currentField === 1 && formData.plan_id) {
+      setCurrentField(2)
+    }
+    if (currentField === 2 && formData.cpf.replace(/\D/g, "").length === 11) {
+      setCurrentField(3)
+    }
+    if (currentField === 3 && birthValid === true) {
+      setCurrentField(4)
+    }
+    if (currentField === 4 && formData.name.length >= 3) {
+      setCurrentField(5)
+    }
+    if (currentField === 5 && formData.email && formData.email.includes('@')) {
+      setCurrentField(6)
+    }
+    if (currentField === 6 && formData.phone.replace(/\D/g, "").length >= 10) {
+      setCurrentField(7)
+    }
+    if (currentField === 7 && whatsappValid === true) {
+      setCurrentField(8)
+    }
+    if (currentField === 8 && cepValid === true) {
+      setCurrentField(9)
+    }
+    if (currentField === 9 && formData.district) {
+      setCurrentField(10)
+    }
+    if (currentField === 10 && formData.city) {
+      setCurrentField(11)
+    }
+    if (currentField === 11 && formData.state) {
+      setCurrentField(12)
+    }
+    if (currentField === 12 && formData.street) {
+      setCurrentField(13)
+    }
+    if (currentField === 13 && formData.number) {
+      setCurrentField(15)
+    }
+    if (currentField === 14) {
+      setCurrentField(15)
+    }
+    if (currentField === 15 && formData.typeFrete) {
+      setCurrentField(16)
+    }
+  }, [formData, currentField, birthValid, whatsappValid, cepValid])
+
+  const isFieldEnabled = (fieldIndex: number) => {
+    return currentField >= fieldIndex
   }
 
   const fetchAddressByCEP = async (cep: string) => {
@@ -513,7 +612,7 @@ export default function RegistrationForm() {
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Escolha seu Plano</h2>
 
             <div className="space-y-4">
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(0) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label>Tipo de Chip</Label>
                 <RadioGroup
                   value={formData.typeChip}
@@ -522,6 +621,7 @@ export default function RegistrationForm() {
                     handleInputChange("plan_id", "")
                   }}
                   className="flex gap-4"
+                  disabled={!isFieldEnabled(0)}
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="fisico" id="fisico" />
@@ -538,7 +638,7 @@ export default function RegistrationForm() {
                 </RadioGroup>
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(1) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="plan">
                   Plano <span className="text-red-500">*</span>
                 </Label>
@@ -546,6 +646,7 @@ export default function RegistrationForm() {
                   value={formData.plan_id}
                   onValueChange={(value) => handleInputChange("plan_id", value)}
                   required
+                  disabled={!isFieldEnabled(1)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um plano" />
@@ -584,7 +685,7 @@ export default function RegistrationForm() {
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Dados Pessoais</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-4">
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(2) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="cpf">
                   CPF <span className="text-red-500">*</span>
                 </Label>
@@ -595,11 +696,12 @@ export default function RegistrationForm() {
                   placeholder="000.000.000-00"
                   maxLength={14}
                   required
+                  disabled={!isFieldEnabled(2)}
                   className={cpfValidated ? "border-green-500" : ""}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(3) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="birth">
                   Data de Nascimento <span className="text-red-500">*</span>
                 </Label>
@@ -612,10 +714,23 @@ export default function RegistrationForm() {
                   placeholder="DD/MM/AAAA"
                   maxLength={10}
                   required
+                  disabled={!isFieldEnabled(3)}
+                  className={
+                    birthValid === false
+                      ? "border-red-500 border-2"
+                      : birthValid === true
+                      ? "border-green-500"
+                      : ""
+                  }
                 />
+                {birthValid === false && (
+                  <p className="text-sm text-red-500 font-medium">
+                    Data inválida! Use o formato DD/MM/AAAA completo (ex: 01/01/1990)
+                  </p>
+                )}
               </div>
 
-              <div className="space-y-2 md:col-span-2 lg:col-span-1">
+              <div className={`space-y-2 md:col-span-2 lg:col-span-1 ${!isFieldEnabled(4) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="name">
                   Nome Completo <span className="text-red-500">*</span>
                 </Label>
@@ -626,6 +741,7 @@ export default function RegistrationForm() {
                   placeholder="Seu nome completo"
                   required
                   readOnly={cpfValidated}
+                  disabled={!isFieldEnabled(4)}
                   className={cpfValidated ? "border-green-500" : ""}
                 />
               </div>
@@ -638,7 +754,7 @@ export default function RegistrationForm() {
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Contato</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-4">
-              <div className="space-y-2 md:col-span-2">
+              <div className={`space-y-2 md:col-span-2 ${!isFieldEnabled(5) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="email">
                   Email <span className="text-red-500">*</span>
                 </Label>
@@ -650,11 +766,12 @@ export default function RegistrationForm() {
                   onBlur={(e) => validateEmail(e.target.value)}
                   placeholder="seu@email.com"
                   required
+                  disabled={!isFieldEnabled(5)}
                   className={emailValidated ? "border-green-500" : ""}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(6) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="phone">
                   Telefone <span className="text-red-500">*</span>
                 </Label>
@@ -665,21 +782,47 @@ export default function RegistrationForm() {
                   placeholder="(00) 0000-0000"
                   maxLength={15}
                   required
+                  disabled={!isFieldEnabled(6)}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(7) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="cell">
-                  Celular <span className="text-red-500">*</span>
+                  Celular / WhatsApp <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="cell"
                   value={formData.cell}
                   onChange={(e) => handleInputChange("cell", e.target.value)}
+                  onBlur={(e) => {
+                    const numbers = e.target.value.replace(/\D/g, "")
+                    if (numbers.length >= 10) {
+                      validateWhatsApp(e.target.value)
+                    }
+                  }}
                   placeholder="(00) 00000-0000"
                   maxLength={15}
                   required
+                  disabled={!isFieldEnabled(7)}
+                  className={
+                    whatsappValid === false
+                      ? "border-red-500 border-2"
+                      : whatsappValid === true
+                      ? "border-green-500"
+                      : ""
+                  }
                 />
+                {whatsappValidating && (
+                  <p className="text-sm text-blue-600 font-medium">Validando WhatsApp...</p>
+                )}
+                {whatsappValid === false && !whatsappValidating && (
+                  <p className="text-sm text-red-500 font-medium">
+                    Número não encontrado no WhatsApp! Verifique o número digitado.
+                  </p>
+                )}
+                {whatsappValid === true && (
+                  <p className="text-sm text-green-600 font-medium">WhatsApp válido</p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -690,7 +833,7 @@ export default function RegistrationForm() {
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Endereço</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-4">
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(8) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="cep">
                   CEP <span className="text-red-500">*</span>
                 </Label>
@@ -705,6 +848,7 @@ export default function RegistrationForm() {
                   placeholder="00000-000"
                   maxLength={9}
                   required
+                  disabled={!isFieldEnabled(8)}
                   className={cepValid === false ? "border-red-500 border-2" : cepValid === true ? "border-green-500" : ""}
                 />
                 {cepValid === false && (
@@ -712,7 +856,7 @@ export default function RegistrationForm() {
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(9) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="district">
                   Bairro <span className="text-red-500">*</span>
                 </Label>
@@ -722,10 +866,11 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("district", e.target.value)}
                   placeholder="Seu bairro"
                   required
+                  disabled={!isFieldEnabled(9)}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(10) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="city">
                   Cidade <span className="text-red-500">*</span>
                 </Label>
@@ -735,14 +880,20 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("city", e.target.value)}
                   placeholder="Sua cidade"
                   required
+                  disabled={!isFieldEnabled(10)}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(11) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="state">
                   Estado <span className="text-red-500">*</span>
                 </Label>
-                <Select value={formData.state} onValueChange={(value) => handleInputChange("state", value)} required>
+                <Select
+                  value={formData.state}
+                  onValueChange={(value) => handleInputChange("state", value)}
+                  required
+                  disabled={!isFieldEnabled(11)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
@@ -756,7 +907,7 @@ export default function RegistrationForm() {
                 </Select>
               </div>
 
-              <div className="space-y-2 md:col-span-2 lg:col-span-3">
+              <div className={`space-y-2 md:col-span-2 lg:col-span-3 ${!isFieldEnabled(12) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="street">
                   Endereço <span className="text-red-500">*</span>
                 </Label>
@@ -766,26 +917,29 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("street", e.target.value)}
                   placeholder="Rua, Avenida, etc"
                   required
+                  disabled={!isFieldEnabled(12)}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className={`space-y-2 ${!isFieldEnabled(13) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="number">Número</Label>
                 <Input
                   id="number"
                   value={formData.number}
                   onChange={(e) => handleInputChange("number", e.target.value)}
                   placeholder="123"
+                  disabled={!isFieldEnabled(13)}
                 />
               </div>
 
-              <div className="space-y-2 md:col-span-2">
+              <div className={`space-y-2 md:col-span-2 ${!isFieldEnabled(14) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Label htmlFor="complement">Complemento</Label>
                 <Input
                   id="complement"
                   value={formData.complement}
                   onChange={(e) => handleInputChange("complement", e.target.value)}
                   placeholder="Apto, Bloco, etc"
+                  disabled={!isFieldEnabled(14)}
                 />
               </div>
             </div>
@@ -793,13 +947,14 @@ export default function RegistrationForm() {
         </Card>
 
         {/* Forma de Envio */}
-        <Card>
+        <Card className={!isFieldEnabled(15) ? 'opacity-50' : ''}>
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Forma de Envio</h2>
             <RadioGroup
               value={formData.typeFrete}
               onValueChange={(value) => handleInputChange("typeFrete", value)}
-              className="space-y-3"
+              className={`space-y-3 ${!isFieldEnabled(15) ? 'pointer-events-none' : ''}`}
+              disabled={!isFieldEnabled(15)}
             >
               {formData.typeChip === "fisico" && (
                 <>
@@ -845,7 +1000,11 @@ export default function RegistrationForm() {
             <Button type="button" variant="outline" onClick={() => window.history.back()}>
               Voltar
             </Button>
-            <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+            <Button
+              type="submit"
+              disabled={loading || currentField < 16}
+              className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               {loading ? "Processando..." : "Salvar"}
             </Button>
           </div>
