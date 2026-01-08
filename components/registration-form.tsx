@@ -525,24 +525,17 @@ export default function RegistrationForm() {
 
       const data = await response.json()
 
-      // Verificar se há mensagem na resposta
-      if (data.message) {
-        if (response.ok) {
-          // Sucesso - mostrar popup de sucesso com a mensagem do webhook
-          setSuccessMessage(data.message)
-          setShowSuccessModal(true)
-        } else {
-          // Erro - mostrar modal de erro com a mensagem do webhook
-          setErrorMessage(data.message)
-          setShowErrorModal(true)
-        }
-      } else if (response.ok) {
-        // Sucesso sem mensagem específica
+      if (response.ok) {
+        // Sucesso - mostrar popup de sucesso com mensagem padrão
         setSuccessMessage('Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.')
         setShowSuccessModal(true)
       } else {
-        // Erro sem mensagem específica
-        setErrorMessage('Erro ao processar cadastro. Tente novamente.')
+        // Erro - mostrar modal de erro com a mensagem do webhook
+        if (data.message) {
+          setErrorMessage(data.message)
+        } else {
+          setErrorMessage('Erro ao processar cadastro. Tente novamente.')
+        }
         setShowErrorModal(true)
       }
 
