@@ -12,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import ErrorModal from "@/components/error-modal"
 
-const REFERRAL_ID = "108054" //  Layanna Kristina Chagas Araujo Faustino
+const DEFAULT_REFERRAL_ID = "108054" // Layanna Kristina Chagas Araujo Faustino
 
 const BRAZILIAN_STATES = [
   { value: "AC", label: "Acre" },
@@ -61,31 +61,38 @@ const PLANS = {
   ],
 }
 
-export default function RegistrationForm() {
+interface Representante {
+  id: string
+  nome: string
+  whatsapp: string
+}
+
+interface RegistrationFormProps {
+  representante?: Representante
+}
+
+export default function RegistrationForm({ representante }: RegistrationFormProps) {
+  const REFERRAL_ID = representante?.id || DEFAULT_REFERRAL_ID
+
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errorMessage, setErrorMessage] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
   const [billingId, setBillingId] = useState<string>("")
   const [orderAmount, setOrderAmount] = useState<number>(0)
   const [cpfValidated, setCpfValidated] = useState(false)
   const [emailValidated, setEmailValidated] = useState(false)
   const [showWelcomeVideo, setShowWelcomeVideo] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [successMessage, setSuccessMessage] = useState("")
   const [cepValid, setCepValid] = useState<boolean | null>(null)
-  const [whatsappValid, setWhatsappValid] = useState<boolean | null>(null)
-  const [whatsappValidating, setWhatsappValidating] = useState(false)
-  const [birthValid, setBirthValid] = useState<boolean | null>(null)
-  const [currentField, setCurrentField] = useState(0)
 
   const [formData, setFormData] = useState({
     cpf: "",
     birth: "",
     name: "",
     email: "",
-    phone: "",
     cell: "",
     cep: "",
     district: "",
@@ -94,11 +101,17 @@ export default function RegistrationForm() {
     street: "",
     number: "",
     complement: "",
-    typeChip: "fisico",
+    typeChip: "",
     coupon: "",
     plan_id: "",
     typeFrete: "",
   })
+
+  // Estados para controle visual de preenchimento sequencial
+  const [activeField, setActiveField] = useState<string>("typeChip")
+  const [birthValid, setBirthValid] = useState<boolean | null>(null)
+  const [whatsappValid, setWhatsappValid] = useState<boolean | null>(null)
+  const [whatsappValidating, setWhatsappValidating] = useState(false)
 
   const formatCPF = (value: string) => {
     const numbers = value.replace(/\D/g, "")
@@ -149,11 +162,36 @@ export default function RegistrationForm() {
     return `${day}/${month}/${year}`
   }
 
-  const validateBirthFormat = (birth: string): boolean => {
-    const numbers = birth.replace(/\D/g, "")
-    return numbers.length === 8
+  const handleInputChange = (field: string, value: string) => {
+    let formattedValue = value
+
+    if (field === "cpf") {
+      formattedValue = formatCPF(value)
+    } else if (field === "cell") {
+      formattedValue = formatPhone(value)
+    } else if (field === "birth") {
+      formattedValue = formatDateInput(value)
+      // Validar formato visual da data
+      const numbers = value.replace(/\D/g, "")
+      if (numbers.length === 8) {
+        setBirthValid(true)
+        checkFieldCompletion(field, formattedValue)
+      } else {
+        setBirthValid(numbers.length > 0 ? false : null)
+      }
+    } else if (field === "cep") {
+      formattedValue = formatCEP(value)
+    }
+
+    setFormData((prev) => ({ ...prev, [field]: formattedValue }))
+
+    // Verificar se o campo foi preenchido corretamente e liberar o próximo
+    if (field !== "birth") {
+      checkFieldCompletion(field, formattedValue)
+    }
   }
 
+  // Validar WhatsApp via wa.me
   const validateWhatsApp = async (phone: string) => {
     const numbers = phone.replace(/\D/g, "")
 
@@ -163,9 +201,10 @@ export default function RegistrationForm() {
     }
 
     setWhatsappValidating(true)
-    const cleanNumber = `55${numbers}`
 
     try {
+      const waNumber = `55${numbers}`
+
       const response = await fetch('https://webhook.fiqon.app/webhook/019b97c2-6aed-7162-8a3a-1fd63694ecd6/5fb591d0-1499-4928-9b9f-198abec46afe', {
         method: 'POST',
         headers: {
@@ -173,7 +212,7 @@ export default function RegistrationForm() {
         },
         body: JSON.stringify({
           chat: {
-            phone: cleanNumber
+            phone: waNumber
           }
         })
       })
@@ -182,16 +221,11 @@ export default function RegistrationForm() {
 
       if (data.existe === true) {
         setWhatsappValid(true)
-        setWhatsappValidating(false)
-        toast({
-          title: "WhatsApp válido",
-          description: "Número confirmado no WhatsApp.",
-        })
+        checkFieldCompletion("cell", phone)
       } else {
         setWhatsappValid(false)
-        setWhatsappValidating(false)
         toast({
-          title: "Número inválido",
+          title: "WhatsApp inválido",
           description: "O número informado não possui WhatsApp. Por favor, verifique.",
           variant: "destructive",
         })
@@ -199,86 +233,128 @@ export default function RegistrationForm() {
     } catch (error) {
       console.error('Erro ao validar WhatsApp:', error)
       setWhatsappValid(false)
-      setWhatsappValidating(false)
       toast({
         title: "Erro na validação",
-        description: "Não foi possível validar o número. Tente novamente.",
+        description: "Não foi possível validar o WhatsApp. Tente novamente.",
         variant: "destructive",
       })
+    } finally {
+      setWhatsappValidating(false)
     }
   }
 
-  const handleInputChange = (field: string, value: string) => {
-    let formattedValue = value
+  // Verificar se campo está completo e liberar próximo
+  const checkFieldCompletion = (field: string, value: string) => {
+    const fieldOrder = [
+      "typeChip",
+      "plan_id",
+      "cpf",
+      "birth",
+      "name",
+      "email",
+      "cell",
+      "cep",
+      "district",
+      "city",
+      "state",
+      "street",
+      "number",
+      "complement",
+      "typeFrete"
+    ]
 
-    if (field === "cpf") {
-      formattedValue = formatCPF(value)
-    } else if (field === "phone" || field === "cell") {
-      formattedValue = formatPhone(value)
-    } else if (field === "cep") {
-      formattedValue = formatCEP(value)
-    } else if (field === "birth") {
-      formattedValue = formatDateInput(value)
-      const isValid = validateBirthFormat(formattedValue)
-      setBirthValid(isValid)
+    const currentIndex = fieldOrder.indexOf(field)
+    if (currentIndex === -1) return
+
+    let isValid = false
+
+    switch (field) {
+      case "typeChip":
+        isValid = value === "fisico" || value === "eSim"
+        break
+      case "plan_id":
+        isValid = value !== ""
+        break
+      case "cpf":
+        isValid = value.replace(/\D/g, "").length === 11
+        break
+      case "birth":
+        isValid = value.replace(/\D/g, "").length === 8
+        break
+      case "name":
+        isValid = value.trim().length > 3
+        break
+      case "email":
+        isValid = value.includes("@") && value.includes(".")
+        break
+      case "cell":
+        const numbers = value.replace(/\D/g, "")
+        isValid = numbers.length >= 10 && numbers.length <= 11
+        break
+      case "cep":
+        isValid = value.replace(/\D/g, "").length === 8
+        // Quando o CEP for válido, liberar TODOS os campos de endereço de uma vez
+        if (isValid) {
+          setActiveField("complement")
+          return
+        }
+        break
+      case "district":
+      case "city":
+      case "street":
+        isValid = value.trim().length > 0
+        break
+      case "state":
+        isValid = value !== ""
+        break
+      case "number":
+      case "complement":
+        isValid = true // Campos opcionais
+        break
+      case "typeFrete":
+        isValid = value !== ""
+        break
     }
 
-    setFormData((prev) => ({ ...prev, [field]: formattedValue }))
+    if (isValid && currentIndex < fieldOrder.length - 1) {
+      setActiveField(fieldOrder[currentIndex + 1])
+    }
+
+    // Verificar se todos os campos de endereço obrigatórios estão preenchidos para liberar typeFrete
+    if (["district", "city", "state", "street"].includes(field)) {
+      if (formData.district.trim().length > 0 &&
+          formData.city.trim().length > 0 &&
+          formData.state !== "" &&
+          formData.street.trim().length > 0) {
+        setActiveField("typeFrete")
+      }
+    }
   }
 
-  useEffect(() => {
-    if (currentField === 0 && formData.typeChip) {
-      setCurrentField(1)
-    }
-    if (currentField === 1 && formData.plan_id) {
-      setCurrentField(2)
-    }
-    if (currentField === 2 && formData.cpf.replace(/\D/g, "").length === 11) {
-      setCurrentField(3)
-    }
-    if (currentField === 3 && birthValid === true) {
-      setCurrentField(4)
-    }
-    if (currentField === 4 && formData.name.length >= 3) {
-      setCurrentField(5)
-    }
-    if (currentField === 5 && formData.email && formData.email.includes('@')) {
-      setCurrentField(6)
-    }
-    if (currentField === 6 && formData.phone.replace(/\D/g, "").length >= 10) {
-      setCurrentField(7)
-    }
-    if (currentField === 7 && whatsappValid === true) {
-      setCurrentField(8)
-    }
-    if (currentField === 8 && cepValid === true) {
-      setCurrentField(9)
-    }
-    if (currentField === 9 && formData.district) {
-      setCurrentField(10)
-    }
-    if (currentField === 10 && formData.city) {
-      setCurrentField(11)
-    }
-    if (currentField === 11 && formData.state) {
-      setCurrentField(12)
-    }
-    if (currentField === 12 && formData.street) {
-      setCurrentField(13)
-    }
-    if (currentField === 13 && formData.number) {
-      setCurrentField(15)
-    }
-    if (currentField === 14) {
-      setCurrentField(15)
-    }
-    if (currentField === 15 && formData.typeFrete) {
-      setCurrentField(16)
-    }
-  }, [formData, currentField, birthValid, whatsappValid, cepValid])
+  // Verificar se um campo pode ser interagido
+  const isFieldUnlocked = (fieldName: string): boolean => {
+    const fieldOrder = [
+      "typeChip",
+      "plan_id",
+      "cpf",
+      "birth",
+      "name",
+      "email",
+      "cell",
+      "cep",
+      "district",
+      "city",
+      "state",
+      "street",
+      "number",
+      "complement",
+      "typeFrete"
+    ]
 
-  const isFieldEnabled = (fieldIndex: number) => {
-    return currentField >= fieldIndex
+    const currentIndex = fieldOrder.indexOf(activeField)
+    const targetIndex = fieldOrder.indexOf(fieldName)
+
+    return targetIndex <= currentIndex
   }
 
   const fetchAddressByCEP = async (cep: string) => {
@@ -290,18 +366,9 @@ export default function RegistrationForm() {
 
     try {
       const response = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`)
-
-      if (!response.ok) {
-        console.error("Erro na resposta da API ViaCEP:", response.status)
-        setCepValid(false)
-        return
-      }
-
       const data = await response.json()
 
-      if (data.erro === true) {
-        setCepValid(false)
-      } else if (data.cep) {
+      if (!data.erro) {
         setCepValid(true)
         setFormData((prev) => ({
           ...prev,
@@ -315,7 +382,7 @@ export default function RegistrationForm() {
       }
     } catch (error) {
       console.error("Erro ao buscar CEP:", error)
-      setCepValid(null)
+      setCepValid(false)
     }
   }
 
@@ -362,17 +429,23 @@ export default function RegistrationForm() {
       const data = await response.json()
 
       if (data.data && data.data.id) {
-        // Auto-fill name and mark fields as validated
+        const autoFilledName = data.data.nome_da_pf || ""
         setFormData((prev) => ({
           ...prev,
-          name: data.data.nome_da_pf || prev.name,
+          name: autoFilledName,
         }))
         setCpfValidated(true)
+
+        if (autoFilledName.trim().length > 3) {
+          setActiveField("email")
+        }
+
         toast({
           title: "CPF validado!",
           description: "Dados preenchidos automaticamente.",
         })
       } else {
+        setActiveField("name")
         toast({
           title: "CPF não encontrado",
           description: "Verifique o CPF e data de nascimento.",
@@ -381,6 +454,7 @@ export default function RegistrationForm() {
       }
     } catch (error) {
       console.error("Erro ao validar CPF:", error)
+      setActiveField("name")
     }
   }
 
@@ -433,6 +507,7 @@ export default function RegistrationForm() {
     }
   }
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -467,7 +542,7 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Preparar dados para o webhook
+      // Preparar dados CONVERTIDOS para o webhook
       const selectedPlan = Object.values(PLANS).flat().find(plan => plan.id === formData.plan_id)
       let planName = 'Plano não identificado'
 
@@ -488,83 +563,146 @@ export default function RegistrationForm() {
       }
 
       const webhookData = {
-        father: REFERRAL_ID,
-        referral_id: REFERRAL_ID,
-        cpf: formData.cpf,
-        name: formData.name,
         nome: formData.name,
-        birth: formData.birth,
+        cpf: formData.cpf,
         data_nascimento: formData.birth,
-        cell: formData.cell,
-        whatsapp: formData.cell,
-        phone: formData.cell,
-        telefone_fixo: formData.phone,
         email: formData.email,
-        cep: formData.cep,
-        district: formData.district,
-        bairro: formData.district,
-        city: formData.city,
-        cidade: formData.city,
-        state: formData.state,
-        estado: formData.state,
-        street: formData.street,
-        endereco: formData.street,
-        number: formData.number,
-        numero: formData.number,
-        typeChip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
-        tipo_chip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
-        typeFrete: formaEnvio,
-        forma_envio: formaEnvio,
-        plan_id: formData.plan_id,
-        plano_id: formData.plan_id,
+        whatsapp: formData.cell,
+        telefone_fixo: "",
         plano: planName,
-        typeRequest: 'integracao',
-        complement: formData.complement,
-        complemento: formData.complement
+        plan_id: formData.plan_id,
+        tipo_chip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
+        forma_envio: formaEnvio,
+        cep: formData.cep,
+        endereco: formData.street,
+        numero: formData.number,
+        complemento: formData.complement,
+        bairro: formData.district,
+        cidade: formData.city,
+        estado: formData.state,
+        referral_id: REFERRAL_ID
       }
 
-      // Enviar para o webhook com timeout de 20 segundos
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 20000)
+      // Mapear webhook URL por representante
+      const webhookURLs: { [key: string]: string } = {
+        '110956': 'https://webhook.fiqon.app/webhook/a0265c1b-d832-483e-af57-8096334a57a8/e167dea4-079e-4af4-9b3f-4acaf711f432',
+        '110403': 'https://webhook.fiqon.app/webhook/019a82d0-9018-73a8-9702-405595187191/15c6ef7c-a0c0-4b0a-b6cf-f873564be560',
+        '88389': 'https://webhook.fiqon.app/webhook/a02ccd6f-0d2f-401d-8d9b-c9e161d5330e/0624b4b1-d658-44d1-8291-ed8f0b5b3bf9',
+        '159726': 'https://webhook.fiqon.app/webhook/019b9b1f-c2eb-716c-a0af-b729f6f83256/3a70ef2a-050a-46b8-883a-a2ea63d93243',
+        '140894': 'https://webhook.fiqon.app/webhook/019b9b2c-14e4-702c-b2e8-03caeb5615d4/6cc39296-2244-42e3-8e45-0bd92dae42bb',
+        '163994': 'https://webhook.fiqon.app/webhook/019b9b0b-36fb-702e-aef4-788e7eb1c58d/655162cf-6868-4e73-92dd-c43ef37279fb',
+        '131966': 'https://webhook.fiqon.app/webhook/a0436edd-0f48-454c-9fc2-f916fee56e34/ffc2252d-f738-4870-8287-81ea51a89542',
+        '108054': 'https://webhook.fiqon.app/webhook/019b9b3f-4c25-7378-97f3-27329fcef7d1/50b76f62-30b6-431b-bbf4-cd5739412da3',
+        '119294': 'https://webhook.fiqon.app/webhook/019b9b15-2a9e-70a5-8ca1-19ac2e236a62/036e9dc0-0f7c-44b9-b16d-98b28832960f'
+      }
 
-      const response = await fetch('https://webhook.fiqon.app/webhook/019b9b3f-4c25-7378-97f3-27329fcef7d1/50b76f62-30b6-431b-bbf4-cd5739412da3', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(webhookData),
-        signal: controller.signal
-      })
+      const webhookURL = webhookURLs[REFERRAL_ID]
 
-      clearTimeout(timeoutId)
-
-      const data = await response.json()
-
-      if (response.ok) {
-        // Sucesso - mostrar popup de sucesso com mensagem padrão
-        setSuccessMessage('Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.')
-        setShowSuccessModal(true)
-      } else {
-        // Erro - mostrar modal de erro com a mensagem do webhook
-        if (data.message) {
-          setErrorMessage(data.message)
-        } else {
-          setErrorMessage('Erro ao processar cadastro. Tente novamente.')
-        }
+      if (!webhookURL) {
+        setErrorMessage('Representante não encontrado. Favor verificar.')
         setShowErrorModal(true)
+        setLoading(false)
+        return
       }
 
-      setLoading(false)
+      // Criar AbortController para timeout de 20 segundos
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 segundos
 
-    } catch (error: any) {
+      try {
+        // Enviar dados APENAS para o Webhook e aguardar resposta
+        const response = await fetch(webhookURL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(webhookData),
+          signal: controller.signal
+        })
+
+        clearTimeout(timeoutId)
+
+        console.log('[FiQOn] HTTP Status:', response.status)
+        console.log('[FiQOn] Response OK:', response.ok)
+
+        // Obter texto da resposta
+        const responseText = await response.text()
+        console.log('[FiQOn] Resposta bruta:', responseText)
+
+        // Variável para armazenar a mensagem final
+        let webhookMessage = ''
+
+        // Tentar parsear como JSON primeiro
+        try {
+          const responseData = JSON.parse(responseText)
+          console.log('[FiQOn] Resposta parseada como JSON:', responseData)
+
+          // Extrair mensagem do JSON (conforme $7.body.message do FiQOn)
+          webhookMessage = responseData.message || responseData.msg || responseData.mensagem || ''
+        } catch (parseError) {
+          // Se não for JSON, usar o texto puro como mensagem
+          console.log('[FiQOn] Resposta não é JSON, usando texto puro')
+          webhookMessage = responseText.trim()
+        }
+
+        console.log('[FiQOn] Mensagem final capturada:', webhookMessage)
+
+        // Se temos uma mensagem, exibir para o usuário
+        if (webhookMessage) {
+          // Verificar se é erro (geralmente contém palavras-chave de erro)
+          const lowerMessage = webhookMessage.toLowerCase()
+          const isError = lowerMessage.includes('erro') ||
+                         lowerMessage.includes('já') ||
+                         lowerMessage.includes('inválido') ||
+                         lowerMessage.includes('falha') ||
+                         lowerMessage.includes('não') ||
+                         lowerMessage.includes('sendo utilizado') ||
+                         !response.ok
+
+          if (isError) {
+            // Exibir mensagem de erro retornada pelo webhook
+            setErrorMessage(webhookMessage)
+            setShowErrorModal(true)
+            setLoading(false)
+            return
+          }
+
+          // Se sucesso, exibir mensagem de sucesso
+          setSuccessMessage(webhookMessage)
+          setLoading(false)
+          setShowSuccessModal(true)
+          return
+        }
+
+        // Se não houver mensagem mas resposta for OK, sucesso genérico
+        if (response.ok) {
+          setSuccessMessage('Cadastro realizado com sucesso!')
+          setLoading(false)
+          setShowSuccessModal(true)
+          return
+        }
+
+        // Se não houver mensagem e não for ok, erro genérico
+        setErrorMessage('Erro ao processar cadastro. Tente novamente.')
+        setShowErrorModal(true)
+        setLoading(false)
+
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+
+        if (fetchError.name === 'AbortError') {
+          setErrorMessage('Tempo limite excedido. O servidor está demorando para responder. Tente novamente.')
+          setShowErrorModal(true)
+          setLoading(false)
+          return
+        }
+
+        throw fetchError
+      }
+
+    } catch (error) {
       console.error('Erro ao processar cadastro:', error)
-
-      if (error.name === 'AbortError') {
-        setErrorMessage('A requisição demorou muito tempo. Por favor, tente novamente.')
-      } else {
-        setErrorMessage('Não foi possível completar o cadastro. Verifique sua conexão e tente novamente.')
-      }
-
+      setErrorMessage('Não foi possível completar o cadastro. Verifique sua conexão e tente novamente.')
       setShowErrorModal(true)
       setLoading(false)
     }
@@ -586,13 +724,76 @@ export default function RegistrationForm() {
     video.load()
   }, [])
 
+  // Monitorar campos de endereço e liberar typeFrete quando todos estiverem preenchidos
+  useEffect(() => {
+    if (activeField === "complement" ||
+        (formData.district.trim().length > 0 &&
+         formData.city.trim().length > 0 &&
+         formData.state !== "" &&
+         formData.street.trim().length > 0)) {
+      if (formData.district.trim().length > 0 &&
+          formData.city.trim().length > 0 &&
+          formData.state !== "" &&
+          formData.street.trim().length > 0 &&
+          activeField !== "typeFrete") {
+        setActiveField("typeFrete")
+      }
+    }
+  }, [formData.district, formData.city, formData.state, formData.street, activeField])
+
   if (showSuccessModal) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white rounded-lg p-8 mx-auto max-w-md w-full shadow-2xl">
-          <p className="text-lg md:text-xl text-gray-900 text-center leading-relaxed">
-            {successMessage || 'Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.'}
-          </p>
+        <div className="bg-white rounded-lg p-6 mx-auto max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 text-center">
+            Parabéns! Seu cadastro foi realizado com sucesso. 🎉
+          </h1>
+
+          <div className="space-y-3 text-gray-700 text-sm md:text-base leading-relaxed">
+            <p>
+              Para darmos continuidade com à ativação do seu plano, é necessário realizar o pagamento da sua taxa associativa, no valor proporcional ao plano escolhido por você.
+            </p>
+
+            <p>
+              Essa taxa é solicitada antes da ativação, pois ela confirma oficialmente a sua entrada na Federal Associados.
+            </p>
+
+            <p className="font-semibold">
+              O valor é usado para cobrir os custos administrativos e operacionais, como:
+            </p>
+
+            <ul className="list-disc list-inside space-y-1 ml-4 text-sm">
+              <li>Geração do número.</li>
+              <li>Configuração da linha.</li>
+              <li>Liberação do seu escritório virtual.</li>
+              <li>E acesso a todos os benefícios exclusivos da empresa, como o Clube de Descontos, Cinema Grátis, Programa PBI, entre outros.</li>
+            </ul>
+
+            <p>
+              O pagamento da taxa é o primeiro passo para liberar o seu benefício de internet móvel e garantir sua ativação com total segurança.
+            </p>
+
+            <p>
+              Logo após efetuar o pagamento, você receberá um e-mail para fazer a biometria digital.
+            </p>
+
+            <p className="font-semibold">
+              Após isso já partimos para ativação do seu plano.
+            </p>
+
+            <p className="text-center font-bold text-base md:text-lg mt-4">
+              Clique no botão abaixo para continuar:
+            </p>
+          </div>
+
+          <div className="flex justify-center mt-6">
+            <Button
+              onClick={() => window.location.href = "https://federalassociados.com.br/boletos"}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-base md:text-lg font-semibold rounded-lg shadow-lg transition-colors"
+            >
+              Realizar Adesão
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -607,7 +808,7 @@ export default function RegistrationForm() {
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Escolha seu Plano</h2>
 
             <div className="space-y-4">
-              <div className={`space-y-2 ${!isFieldEnabled(0) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="space-y-2">
                 <Label>Tipo de Chip</Label>
                 <RadioGroup
                   value={formData.typeChip}
@@ -616,16 +817,16 @@ export default function RegistrationForm() {
                     handleInputChange("plan_id", "")
                   }}
                   className="flex gap-4"
-                  disabled={!isFieldEnabled(0)}
+                  disabled={!isFieldUnlocked("typeChip")}
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="fisico" id="fisico" />
+                    <RadioGroupItem value="fisico" id="fisico" disabled={!isFieldUnlocked("typeChip")} />
                     <Label htmlFor="fisico" className="font-normal cursor-pointer">
                       Físico
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="eSim" id="eSim-chip" />
+                    <RadioGroupItem value="eSim" id="eSim-chip" disabled={!isFieldUnlocked("typeChip")} />
                     <Label htmlFor="eSim-chip" className="font-normal cursor-pointer">
                       e-SIM
                     </Label>
@@ -633,7 +834,7 @@ export default function RegistrationForm() {
                 </RadioGroup>
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(1) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("plan_id") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="plan">
                   Plano <span className="text-red-500">*</span>
                 </Label>
@@ -641,7 +842,7 @@ export default function RegistrationForm() {
                   value={formData.plan_id}
                   onValueChange={(value) => handleInputChange("plan_id", value)}
                   required
-                  disabled={!isFieldEnabled(1)}
+                  disabled={!isFieldUnlocked("plan_id")}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um plano" />
@@ -680,7 +881,7 @@ export default function RegistrationForm() {
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Dados Pessoais</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-4">
-              <div className={`space-y-2 ${!isFieldEnabled(2) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("cpf") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="cpf">
                   CPF <span className="text-red-500">*</span>
                 </Label>
@@ -691,12 +892,12 @@ export default function RegistrationForm() {
                   placeholder="000.000.000-00"
                   maxLength={14}
                   required
-                  disabled={!isFieldEnabled(2)}
+                  disabled={!isFieldUnlocked("cpf")}
                   className={cpfValidated ? "border-green-500" : ""}
                 />
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(3) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("birth") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="birth">
                   Data de Nascimento <span className="text-red-500">*</span>
                 </Label>
@@ -709,23 +910,15 @@ export default function RegistrationForm() {
                   placeholder="DD/MM/AAAA"
                   maxLength={10}
                   required
-                  disabled={!isFieldEnabled(3)}
-                  className={
-                    birthValid === false
-                      ? "border-red-500 border-2"
-                      : birthValid === true
-                      ? "border-green-500"
-                      : ""
-                  }
+                  disabled={!isFieldUnlocked("birth")}
+                  className={birthValid === false ? "border-red-500 border-2" : birthValid === true ? "border-green-500" : ""}
                 />
                 {birthValid === false && (
-                  <p className="text-sm text-red-500 font-medium">
-                    Data inválida! Use o formato DD/MM/AAAA completo (ex: 01/01/1990)
-                  </p>
+                  <p className="text-sm text-red-500 font-medium">Data incompleta! Digite no formato DD/MM/AAAA (8 dígitos).</p>
                 )}
               </div>
 
-              <div className={`space-y-2 md:col-span-2 lg:col-span-1 ${!isFieldEnabled(4) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 md:col-span-2 lg:col-span-1 ${!isFieldUnlocked("name") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="name">
                   Nome Completo <span className="text-red-500">*</span>
                 </Label>
@@ -736,7 +929,7 @@ export default function RegistrationForm() {
                   placeholder="Seu nome completo"
                   required
                   readOnly={cpfValidated}
-                  disabled={!isFieldEnabled(4)}
+                  disabled={!isFieldUnlocked("name")}
                   className={cpfValidated ? "border-green-500" : ""}
                 />
               </div>
@@ -749,7 +942,7 @@ export default function RegistrationForm() {
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Contato</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-4">
-              <div className={`space-y-2 md:col-span-2 ${!isFieldEnabled(5) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 md:col-span-2 ${!isFieldUnlocked("email") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="email">
                   Email <span className="text-red-500">*</span>
                 </Label>
@@ -761,29 +954,14 @@ export default function RegistrationForm() {
                   onBlur={(e) => validateEmail(e.target.value)}
                   placeholder="seu@email.com"
                   required
-                  disabled={!isFieldEnabled(5)}
+                  disabled={!isFieldUnlocked("email")}
                   className={emailValidated ? "border-green-500" : ""}
                 />
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(6) ? 'opacity-50 pointer-events-none' : ''}`}>
-                <Label htmlFor="phone">
-                  Telefone <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  placeholder="(00) 0000-0000"
-                  maxLength={15}
-                  required
-                  disabled={!isFieldEnabled(6)}
-                />
-              </div>
-
-              <div className={`space-y-2 ${!isFieldEnabled(7) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("cell") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="cell">
-                  Celular / WhatsApp <span className="text-red-500">*</span>
+                  WhatsApp <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="cell"
@@ -791,14 +969,16 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("cell", e.target.value)}
                   onBlur={(e) => {
                     const numbers = e.target.value.replace(/\D/g, "")
-                    if (numbers.length >= 10) {
+                    if (numbers.length >= 10 && numbers.length <= 11) {
                       validateWhatsApp(e.target.value)
+                    } else if (numbers.length > 0) {
+                      setWhatsappValid(false)
                     }
                   }}
                   placeholder="(00) 00000-0000"
                   maxLength={15}
                   required
-                  disabled={!isFieldEnabled(7)}
+                  disabled={!isFieldUnlocked("cell")}
                   className={
                     whatsappValid === false
                       ? "border-red-500 border-2"
@@ -811,9 +991,7 @@ export default function RegistrationForm() {
                   <p className="text-sm text-blue-600 font-medium">Validando WhatsApp...</p>
                 )}
                 {whatsappValid === false && !whatsappValidating && (
-                  <p className="text-sm text-red-500 font-medium">
-                    Número não encontrado no WhatsApp! Verifique o número digitado.
-                  </p>
+                  <p className="text-sm text-red-500 font-medium">WhatsApp inválido! Verifique o número digitado.</p>
                 )}
                 {whatsappValid === true && (
                   <p className="text-sm text-green-600 font-medium">WhatsApp válido</p>
@@ -828,7 +1006,7 @@ export default function RegistrationForm() {
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Endereço</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-4">
-              <div className={`space-y-2 ${!isFieldEnabled(8) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("cep") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="cep">
                   CEP <span className="text-red-500">*</span>
                 </Label>
@@ -843,7 +1021,7 @@ export default function RegistrationForm() {
                   placeholder="00000-000"
                   maxLength={9}
                   required
-                  disabled={!isFieldEnabled(8)}
+                  disabled={!isFieldUnlocked("cep")}
                   className={cepValid === false ? "border-red-500 border-2" : cepValid === true ? "border-green-500" : ""}
                 />
                 {cepValid === false && (
@@ -851,7 +1029,7 @@ export default function RegistrationForm() {
                 )}
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(9) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("district") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="district">
                   Bairro <span className="text-red-500">*</span>
                 </Label>
@@ -861,11 +1039,11 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("district", e.target.value)}
                   placeholder="Seu bairro"
                   required
-                  disabled={!isFieldEnabled(9)}
+                  disabled={!isFieldUnlocked("district")}
                 />
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(10) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("city") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="city">
                   Cidade <span className="text-red-500">*</span>
                 </Label>
@@ -875,11 +1053,11 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("city", e.target.value)}
                   placeholder="Sua cidade"
                   required
-                  disabled={!isFieldEnabled(10)}
+                  disabled={!isFieldUnlocked("city")}
                 />
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(11) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("state") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="state">
                   Estado <span className="text-red-500">*</span>
                 </Label>
@@ -887,7 +1065,7 @@ export default function RegistrationForm() {
                   value={formData.state}
                   onValueChange={(value) => handleInputChange("state", value)}
                   required
-                  disabled={!isFieldEnabled(11)}
+                  disabled={!isFieldUnlocked("state")}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
@@ -902,7 +1080,7 @@ export default function RegistrationForm() {
                 </Select>
               </div>
 
-              <div className={`space-y-2 md:col-span-2 lg:col-span-3 ${!isFieldEnabled(12) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 md:col-span-2 lg:col-span-3 ${!isFieldUnlocked("street") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="street">
                   Endereço <span className="text-red-500">*</span>
                 </Label>
@@ -912,29 +1090,29 @@ export default function RegistrationForm() {
                   onChange={(e) => handleInputChange("street", e.target.value)}
                   placeholder="Rua, Avenida, etc"
                   required
-                  disabled={!isFieldEnabled(12)}
+                  disabled={!isFieldUnlocked("street")}
                 />
               </div>
 
-              <div className={`space-y-2 ${!isFieldEnabled(13) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 ${!isFieldUnlocked("number") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="number">Número</Label>
                 <Input
                   id="number"
                   value={formData.number}
                   onChange={(e) => handleInputChange("number", e.target.value)}
                   placeholder="123"
-                  disabled={!isFieldEnabled(13)}
+                  disabled={!isFieldUnlocked("number")}
                 />
               </div>
 
-              <div className={`space-y-2 md:col-span-2 ${!isFieldEnabled(14) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className={`space-y-2 md:col-span-2 ${!isFieldUnlocked("complement") ? "opacity-50 pointer-events-none" : ""}`}>
                 <Label htmlFor="complement">Complemento</Label>
                 <Input
                   id="complement"
                   value={formData.complement}
                   onChange={(e) => handleInputChange("complement", e.target.value)}
                   placeholder="Apto, Bloco, etc"
-                  disabled={!isFieldEnabled(14)}
+                  disabled={!isFieldUnlocked("complement")}
                 />
               </div>
             </div>
@@ -942,71 +1120,63 @@ export default function RegistrationForm() {
         </Card>
 
         {/* Forma de Envio */}
-        <Card className={!isFieldEnabled(15) ? 'opacity-50' : ''}>
+        <Card>
           <CardContent className="pt-4 md:pt-6 px-4 md:px-6">
             <h2 className="text-lg md:text-xl font-semibold mb-4 md:mb-6">Forma de Envio</h2>
-            <RadioGroup
-              value={formData.typeFrete}
-              onValueChange={(value) => handleInputChange("typeFrete", value)}
-              className={`space-y-3 ${!isFieldEnabled(15) ? 'pointer-events-none' : ''}`}
-              disabled={!isFieldEnabled(15)}
-            >
-              {formData.typeChip === "fisico" && (
-                <>
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="Carta" id="carta" />
-                      <Label htmlFor="carta" className="font-normal cursor-pointer">
-                        Enviar via Carta Registrada
-                      </Label>
+            <div className={!isFieldUnlocked("typeFrete") ? "opacity-50 pointer-events-none" : ""}>
+              <RadioGroup
+                value={formData.typeFrete}
+                onValueChange={(value) => handleInputChange("typeFrete", value)}
+                className="space-y-3"
+                disabled={!isFieldUnlocked("typeFrete")}
+              >
+                {formData.typeChip === "fisico" && (
+                  <>
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="Carta" id="carta" disabled={!isFieldUnlocked("typeFrete")} />
+                        <Label htmlFor="carta" className="font-normal cursor-pointer">
+                          Enviar via Carta Registrada
+                        </Label>
+                      </div>
+                      <p className="text-sm text-muted-foreground ml-6">
+                        Para quem vai receber o chip pelos Correios
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground ml-6">
-                      Para quem vai receber o chip pelos Correios
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="semFrete" id="semFrete" />
-                      <Label htmlFor="semFrete" className="font-normal cursor-pointer">
-                        Retirar na Associação ou com um Associado
-                      </Label>
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="semFrete" id="semFrete" disabled={!isFieldUnlocked("typeFrete")} />
+                        <Label htmlFor="semFrete" className="font-normal cursor-pointer">
+                          Retirar na Associação ou com um Associado
+                        </Label>
+                      </div>
+                      <p className="text-sm text-muted-foreground ml-6">
+                        Se você vai retirar o chip pessoalmente com um representante ou no caso dos planos da Vivo, vai comprar um chip para ativar de forma imediata
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground ml-6">
-                      Se você vai retirar o chip pessoalmente com um representante ou no caso dos planos da Vivo, vai comprar um chip para ativar de forma imediata
-                    </p>
+                  </>
+                )}
+                {formData.typeChip === "eSim" && (
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="eSim" id="eSim" disabled={!isFieldUnlocked("typeFrete")} />
+                    <Label htmlFor="eSim" className="font-normal cursor-pointer">
+                      Sem a necessidade de envio (e-SIM)
+                    </Label>
                   </div>
-                </>
-              )}
-              {formData.typeChip === "eSim" && (
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="eSim" id="eSim" />
-                  <Label htmlFor="eSim" className="font-normal cursor-pointer">
-                    Sem a necessidade de envio (e-SIM)
-                  </Label>
-                </div>
-              )}
-            </RadioGroup>
+                )}
+              </RadioGroup>
+            </div>
           </CardContent>
         </Card>
 
         {/* Botões */}
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex gap-4 justify-end w-full">
-            <Button type="button" variant="outline" onClick={() => window.history.back()}>
-              Voltar
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || currentField < 16}
-              className="bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? "Processando..." : "Salvar"}
-            </Button>
-          </div>
-
-          <p className="text-sm text-gray-600 text-center max-w-2xl">
-            Ao clicar em salvar, você será redirecionado para realizar o pagamento da sua taxa associativa, sendo ela o valor proporcional ao plano que você escolheu.
-          </p>
+        <div className="flex gap-4 justify-end">
+          <Button type="button" variant="outline" onClick={() => window.history.back()}>
+            Voltar
+          </Button>
+          <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+            {loading ? "Processando..." : "Salvar"}
+          </Button>
         </div>
       </form>
 
