@@ -488,24 +488,25 @@ export default function RegistrationForm() {
       }
 
       const webhookData = {
-        nome: formData.name,
+        father: REFERRAL_ID,
         cpf: formData.cpf,
+        name: formData.name,
+        birth: formData.birth,
         data_nascimento: formData.birth,
+        cell: formData.cell,
+        phone: formData.cell,
         email: formData.email,
-        whatsapp: formData.cell,
-        telefone_fixo: formData.phone,
-        plano: planName,
-        plano_id: formData.plan_id,
-        tipo_chip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
-        forma_envio: formaEnvio,
         cep: formData.cep,
-        endereco: formData.street,
-        numero: formData.number,
-        complemento: formData.complement,
-        bairro: formData.district,
-        cidade: formData.city,
-        estado: formData.state,
-        referral_id: REFERRAL_ID
+        district: formData.district,
+        city: formData.city,
+        state: formData.state,
+        street: formData.street,
+        number: formData.number,
+        typeChip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
+        typeFrete: formaEnvio,
+        plan_id: formData.plan_id,
+        typeRequest: 'integracao',
+        complement: formData.complement
       }
 
       // Enviar para o webhook com timeout de 20 segundos
