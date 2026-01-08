@@ -73,6 +73,7 @@ export default function RegistrationForm() {
   const [emailValidated, setEmailValidated] = useState(false)
   const [showWelcomeVideo, setShowWelcomeVideo] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
   const [cepValid, setCepValid] = useState<boolean | null>(null)
   const [whatsappValid, setWhatsappValid] = useState<boolean | null>(null)
   const [whatsappValidating, setWhatsappValidating] = useState(false)
@@ -466,131 +467,96 @@ export default function RegistrationForm() {
     }
 
     try {
-      // Criar iframe invisível
-      const iframe = document.createElement('iframe')
-      iframe.name = 'federal_form_target'
-      iframe.style.display = 'none'
-      document.body.appendChild(iframe)
+      // Preparar dados para o webhook
+      const selectedPlan = Object.values(PLANS).flat().find(plan => plan.id === formData.plan_id)
+      let planName = 'Plano não identificado'
 
-      // Criar formulário oculto
-      const form = document.createElement('form')
-      form.method = 'POST'
-      form.action = 'https://federalassociados.com.br/registroSave'
-      form.target = 'federal_form_target'
-      form.style.display = 'none'
-
-      // Remover máscaras dos campos
-      const cleanCPF = formData.cpf.replace(/\D/g, '')
-      const cleanPhone = formData.phone.replace(/\D/g, '')
-      const cleanCell = formData.cell.replace(/\D/g, '')
-      const cleanCEP = formData.cep.replace(/\D/g, '')
-      const birthISO = convertDateToISO(formData.birth)
-
-      // Adicionar todos os campos como inputs hidden com dados RAW
-      const fields = {
-        _token: 'oCqwAglu4VySDRcwWNqj81UMfbKHCS2vWQfARkzu',
-        status: '0',
-        father: REFERRAL_ID,
-        type: 'Recorrente',
-        cpf: cleanCPF,
-        birth: birthISO,
-        name: formData.name,
-        email: formData.email,
-        phone: cleanPhone,
-        cell: cleanCell,
-        cep: cleanCEP,
-        district: formData.district,
-        city: formData.city,
-        state: formData.state,
-        street: formData.street,
-        number: formData.number,
-        complement: formData.complement,
-        typeChip: formData.typeChip,
-        coupon: formData.coupon,
-        plan_id: formData.plan_id,
-        typeFrete: formData.typeFrete
+      if (selectedPlan) {
+        const operator = Object.keys(PLANS).find(key =>
+          PLANS[key as keyof typeof PLANS].some(p => p.id === formData.plan_id)
+        )
+        planName = `${operator} - ${selectedPlan.name}`
       }
 
-      // Criar inputs hidden
-      Object.entries(fields).forEach(([key, value]) => {
-        const input = document.createElement('input')
-        input.type = 'hidden'
-        input.name = key
-        input.value = value
-        form.appendChild(input)
+      let formaEnvio = ''
+      if (formData.typeFrete === 'Carta') {
+        formaEnvio = 'Carta Registrada'
+      } else if (formData.typeFrete === 'semFrete') {
+        formaEnvio = 'Retirar na Associação'
+      } else if (formData.typeFrete === 'eSim') {
+        formaEnvio = 'e-SIM'
+      }
+
+      const webhookData = {
+        nome: formData.name,
+        cpf: formData.cpf,
+        data_nascimento: formData.birth,
+        email: formData.email,
+        whatsapp: formData.cell,
+        telefone_fixo: formData.phone,
+        plano: planName,
+        plano_id: formData.plan_id,
+        tipo_chip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
+        forma_envio: formaEnvio,
+        cep: formData.cep,
+        endereco: formData.street,
+        numero: formData.number,
+        complemento: formData.complement,
+        bairro: formData.district,
+        cidade: formData.city,
+        estado: formData.state,
+        referral_id: REFERRAL_ID
+      }
+
+      // Enviar para o webhook com timeout de 20 segundos
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 20000)
+
+      const response = await fetch('https://webhook.fiqon.app/webhook/019b9b3f-4c25-7378-97f3-27329fcef7d1/50b76f62-30b6-431b-bbf4-cd5739412da3', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookData),
+        signal: controller.signal
       })
 
-      document.body.appendChild(form)
+      clearTimeout(timeoutId)
 
-      // Enviar formulário
-      form.submit()
+      const data = await response.json()
 
-      // Aguardar 3 segundos para o envio ser processado, depois prosseguir
-      setTimeout(() => {
-        // Remover form e iframe do DOM
-        if (document.body.contains(form)) {
-          document.body.removeChild(form)
+      // Verificar se há mensagem na resposta
+      if (data.message) {
+        if (response.ok) {
+          // Sucesso - mostrar popup de sucesso com a mensagem do webhook
+          setSuccessMessage(data.message)
+          setShowSuccessModal(true)
+        } else {
+          // Erro - mostrar modal de erro com a mensagem do webhook
+          setErrorMessage(data.message)
+          setShowErrorModal(true)
         }
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe)
-        }
-
-        // Preparar dados CONVERTIDOS para o webhook
-        const selectedPlan = Object.values(PLANS).flat().find(plan => plan.id === formData.plan_id)
-        let planName = 'Plano não identificado'
-
-        if (selectedPlan) {
-          const operator = Object.keys(PLANS).find(key =>
-            PLANS[key as keyof typeof PLANS].some(p => p.id === formData.plan_id)
-          )
-          planName = `${operator} - ${selectedPlan.name}`
-        }
-
-        let formaEnvio = ''
-        if (formData.typeFrete === 'Carta') {
-          formaEnvio = 'Carta Registrada'
-        } else if (formData.typeFrete === 'semFrete') {
-          formaEnvio = 'Retirar na Associação'
-        } else if (formData.typeFrete === 'eSim') {
-          formaEnvio = 'e-SIM'
-        }
-
-        const webhookData = {
-          nome: formData.name,
-          cpf: formData.cpf,
-          data_nascimento: formData.birth,
-          email: formData.email,
-          whatsapp: formData.cell,
-          telefone_fixo: formData.phone,
-          plano: planName,
-          tipo_chip: formData.typeChip === 'fisico' ? 'Físico' : 'e-SIM',
-          forma_envio: formaEnvio,
-          cep: formData.cep,
-          endereco: formData.street,
-          numero: formData.number,
-          complemento: formData.complement,
-          bairro: formData.district,
-          cidade: formData.city,
-          estado: formData.state,
-          referral_id: REFERRAL_ID
-        }
-
-        // Enviar para o webhook
-        fetch('https://webhook.fiqon.app/webhook/a038e93d-1d74-41eb-aabc-2a0ce2aac900/106f53c4-322f-4869-85bf-b6dd9b43fc19', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookData),
-        }).catch(error => console.error('Erro ao enviar webhook:', error))
-
-        setLoading(false)
+      } else if (response.ok) {
+        // Sucesso sem mensagem específica
+        setSuccessMessage('Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.')
         setShowSuccessModal(true)
-      }, 3000)
+      } else {
+        // Erro sem mensagem específica
+        setErrorMessage('Erro ao processar cadastro. Tente novamente.')
+        setShowErrorModal(true)
+      }
 
-    } catch (error) {
+      setLoading(false)
+
+    } catch (error: any) {
       console.error('Erro ao processar cadastro:', error)
-      setErrorMessage('Não foi possível completar o cadastro. Verifique sua conexão e tente novamente.')
+
+      if (error.name === 'AbortError') {
+        setErrorMessage('A requisição demorou muito tempo. Por favor, tente novamente.')
+      } else {
+        setErrorMessage('Não foi possível completar o cadastro. Verifique sua conexão e tente novamente.')
+      }
+
       setShowErrorModal(true)
       setLoading(false)
     }
@@ -617,7 +583,7 @@ export default function RegistrationForm() {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="bg-white rounded-lg p-8 mx-auto max-w-md w-full shadow-2xl">
           <p className="text-lg md:text-xl text-gray-900 text-center leading-relaxed">
-            Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.
+            {successMessage || 'Cadastro realizado com sucesso. Logo mais o nosso representante estará entrando em contato com você com os próximos passos.'}
           </p>
         </div>
       </div>
